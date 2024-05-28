@@ -224,7 +224,6 @@ resource "azurerm_linux_function_app" "func-app" {
   name                = "fa-azurecloudwebresume"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
-
   storage_account_name       = azurerm_storage_account.sa_account.name
   storage_account_access_key = azurerm_storage_account.sa_account.primary_access_key
   service_plan_id            = azurerm_service_plan.app-service-plan.id
@@ -234,6 +233,7 @@ resource "azurerm_linux_function_app" "func-app" {
   site_config {
     cors {
       allowed_origins = ["https://www.imneojay.xyz"]
+      support_credentials = true
     }
     application_insights_connection_string = azurerm_application_insights.app-insights.connection_string
     application_insights_key               = azurerm_application_insights.app-insights.instrumentation_key
