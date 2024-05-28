@@ -4,7 +4,7 @@ window.addEventListener('DOMContentLoaded', (event) =>{
 
 
 const localfunctionApi = 'http://localhost:7071/api/GetAzureResume';
-const azurefunctionApi = 'https://fa-azurewebresume.azurewebsites.net/api/GetAzureResume?';
+const azurefunctionApi = 'https://fa-azurecloudwebresume.azurewebsites.net/api/GetAzureResume?';
 const getVisitCount = () => {
     let count = 1;
     fetch(azurefunctionApi).then(response => {

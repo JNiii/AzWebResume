@@ -1,4 +1,9 @@
 #initialize terraform
+data "azurerm_client_config" "current" {
+}
+
+data azurerm_subscription "current"{ 
+}
 
 terraform {
   required_providers {
@@ -9,12 +14,11 @@ terraform {
   }
     backend "azurerm" {
     resource_group_name  = "Terraform-Backend-Infra"
-    storage_account_name = "sainfraazurewebresume"
+    storage_account_name = "sainfraazwebresume"
     container_name       = "terraform-state"
     key                  = "terraform.tfstate"
   }
 }
-
 provider "azurerm" {
   features {
     resource_group {
@@ -22,7 +26,6 @@ provider "azurerm" {
     }
   }
 }
-
 #Create resource group
 resource "azurerm_resource_group" "rg" {
   name     = "rg-web-resume"
@@ -32,7 +35,7 @@ resource "azurerm_resource_group" "rg" {
 
 #Create storage acccount
 resource "azurerm_storage_account" "sa_account" {
-  name                     = "saazurecloudwebresume"
+  name                     = "saazcloudwebresume"
   resource_group_name      = azurerm_resource_group.rg.name
   location                 = azurerm_resource_group.rg.location
   account_tier             = "Standard"
@@ -90,6 +93,25 @@ resource "azurerm_cdn_endpoint" "cdn-end" {
     }  
   tags = var.AzureResumeTag
 
+
+}
+
+resource "azurerm_dns_zone" "dns-zone" {
+  name                = var.domain
+  resource_group_name = azurerm_resource_group.rg.name
+  tags = var.AzureResumeTag
+
+  depends_on = [ azurerm_cdn_endpoint.cdn-end ]
+}
+
+resource "azurerm_dns_a_record" "dns-a" {
+  name                = "@"
+  zone_name           = azurerm_dns_zone.dns-zone.name
+  resource_group_name = azurerm_resource_group.rg.name
+  ttl                 = 300
+  target_resource_id  = azurerm_cdn_endpoint.cdn-end.id
+  depends_on = [ azurerm_dns_zone.dns-zone ]
+
   provisioner "local-exec" {
     command = <<EOT
     az cdn custom-domain create --endpoint-name ${azurerm_cdn_endpoint.cdn-end.name} --hostname www.${var.domain} --resource-group ${azurerm_resource_group.rg.name} --profile-name ${azurerm_cdn_profile.cdn.name} -n "main-domain"
@@ -106,25 +128,6 @@ resource "azurerm_cdn_endpoint" "cdn-end" {
     working_dir = path.module
   }
 }
-/*
-###################################################
-resource "azurerm_dns_zone" "
-dns-zone" {
-  name                = var.domain
-  resource_group_name = azurerm_resource_group.rg.name
-  tags = var.AzureResumeTag
-
-  depends_on = [ azurerm_cdn_endpoint.cdn-end ]
-}
-
-resource "azurerm_dns_a_record" "dns-a" {
-  name                = "@"
-  zone_name           = azurerm_dns_zone.dns-zone.name
-  resource_group_name = azurerm_resource_group.rg.name
-  ttl                 = 300
-  target_resource_id  = azurerm_cdn_endpoint.cdn-end.id
-  depends_on = [ azurerm_dns_zone.dns-zone ]
-
 resource "azurerm_dns_cname_record" "www_cname" {
   name                = "www"
   zone_name           = azurerm_dns_zone.dns-zone.name
@@ -134,7 +137,7 @@ resource "azurerm_dns_cname_record" "www_cname" {
 
   depends_on = [ azurerm_dns_zone.dns-zone ]
 }
-*/
+
 
 #Create CosmosDB account
 resource "azurerm_cosmosdb_account" "cdb" {
@@ -167,6 +170,7 @@ resource "azurerm_cosmosdb_account" "cdb" {
     max_age_in_seconds = 180
   }
   tags = var.AzureResumeTag
+
 }
 
 #Create CosmosDB Database
@@ -187,6 +191,12 @@ resource "azurerm_cosmosdb_sql_container" "cdb-container" {
 
   indexing_policy {
     indexing_mode = "consistent"
+  }
+  #Upon creation, provision insert_data.py
+  provisioner "local-exec" {
+    command = "python ./Scripts/insert_data.py '${azurerm_cosmosdb_account.cdb.endpoint}' '${azurerm_cosmosdb_account.cdb.primary_key}' '${azurerm_cosmosdb_sql_database.cdb-database.name}' '${azurerm_cosmosdb_sql_container.cdb-container.name}' '${data.azurerm_storage_account.backup-sa.primary_blob_connection_string}' '${var.data-backups[2]}'"
+    interpreter = ["bash", "-c"]
+    working_dir = path.module
   }
 }
 
@@ -244,54 +254,36 @@ resource "azurerm_linux_function_app" "func-app" {
   tags = var.AzureResumeTag
 }
 
-
-#Create RBAC role for Azure resource group
-resource "null_resource" "az-service-principal" {
-  provisioner "local-exec" {
-    command = "az ad sp create-for-rbac --name GetAzureResume --role contributor --scopes '${azurerm_resource_group.rg.id}' --json-auth > ./Secrets/az-rbac-key.txt"
-    interpreter = ["powershell", "-command"]
-    working_dir = path.module
-  }
+data "azurerm_resources" "func-app-data" {
+  name = azurerm_linux_function_app.func-app.name
 }
-
-resource "null_resource" "az-publishing-profile" {
-  depends_on = [ azurerm_linux_function_app.func-app ]
-  provisioner "local-exec" {
-    command = "Get-AzWebAppPublishingProfile -ResourceGroupName ${azurerm_resource_group.rg.name} -name ${azurerm_linux_function_app.func-app.name} -OutputFile './Secrets/fa-azurewebresume.PublishSettings' -Format 'Ftp'"
-    interpreter = ["powershell", "-command"]
-    working_dir = path.module
-  }
-}
-
-resource "null_resource" "backup-item" {
-  triggers = {
-    URI = azurerm_cosmosdb_account.cdb.endpoint
-    KEY = azurerm_cosmosdb_account.cdb.primary_key
-    DB = azurerm_cosmosdb_sql_database.cdb-database.name
-    CONTAINER = azurerm_cosmosdb_sql_container.cdb-container.name
-  }
-  #Insert command get_data.py
-  provisioner "local-exec" {
-    when = destroy
-    command = "python ./Scripts/get_data.py ${self.triggers.URI} ${self.triggers.KEY} ${self.triggers.DB} ${self.triggers.CONTAINER}"
-    working_dir = path.module
-  }
-}
-
 #Create a delay before uploading function app
-resource "time_sleep" "wait_30_seconds" {
+resource "time_sleep" "wait_60_seconds" {
   depends_on = [azurerm_linux_function_app.func-app]
-  create_duration = "30s"
+  create_duration = "60s"
 }
 
 resource "null_resource" "upload-func-app" {
 
-  depends_on = [time_sleep.wait_30_seconds]
+  depends_on = [time_sleep.wait_60_seconds]
 
   provisioner "local-exec" {
     command = "func azure functionapp publish ${azurerm_linux_function_app.func-app.name} --nozip --python"
     interpreter = ["powershell", "-command"]
     working_dir = "../backendApi"
+  }
+}
+
+resource "null_resource" "az-publishing-profile" {
+  depends_on = [ null_resource.upload-func-app ]
+  provisioner "local-exec" {
+    command = <<EOT
+      $subscription = Get-AzSubscription 
+      Select-AzSubscription $subscription.Name
+      Get-AzWebAppPublishingProfile -ResourceGroupName ${azurerm_resource_group.rg.name} -name ${azurerm_linux_function_app.func-app.name} -OutputFile './Secrets/fa-azurecloudwebresume.PublishSettings' -Format 'Ftp'
+    EOT
+    interpreter = ["powershell", "-command"]
+    working_dir = path.cwd
   }
 }
 
@@ -363,9 +355,7 @@ resource "azurerm_monitor_metric_alert" "server-availability-alert" {
 }
 
 
-data "azurerm_resources" "func-app-data" {
-  name = azurerm_linux_function_app.func-app.name
-}
+
 
 resource "azurerm_monitor_metric_alert" "fa-response-time-alert" {
     name = "fa-response-time"
@@ -390,7 +380,7 @@ resource "azurerm_monitor_metric_alert" "fa-response-time-alert" {
     depends_on = [ azurerm_linux_function_app.func-app ]
 }
     
-/*
+
 #Adds a feature that backups file to a storage account container
 data "azurerm_storage_account" "backup-sa" {  
     resource_group_name = var.data-backups[0]
@@ -405,20 +395,36 @@ resource "null_resource" "upload-backup" {
     }
     provisioner "local-exec" {
       when = destroy
-      command = <<EOT
-      python ./Scripts/upload_data.py '${self.triggers.AZURESACS}' '${self.triggers.SA_CONTAINER}'
-      EOT
-      working_dir = path.module
+      command = "python ./Scripts/upload_data.py '${self.triggers.AZURESACS}' '${self.triggers.SA_CONTAINER}'"
+      working_dir = path.cwd
       interpreter = ["bash", "-c"]
   }
 }
-
-resource "null_resource" "insert-data-cdb" {
-  #Upon creation, provision insert_data.py
+#Create RBAC role for Azure resource group
+resource "null_resource" "az-service-principal" {
   provisioner "local-exec" {
-    command = "python ./Scripts/insert_data.py '${azurerm_cosmosdb_account.cdb.endpoint}' '${azurerm_cosmosdb_account.cdb.primary_key}' '${azurerm_cosmosdb_sql_database.cdb-database.name}' '${azurerm_cosmosdb_sql_container.cdb-container.name}' '${data.azurerm_storage_account.backup-sa.primary_blob_connection_string}' '${var.data-backups[2]}'"
+    command = "az ad sp create-for-rbac --name GetAzureResume --role contributor --scopes '${azurerm_resource_group.rg.id}' --json-auth > ./Secrets/az-rbac-key.txt"
+    interpreter = ["powershell", "-command"]
+    working_dir = path.module
+  }
+}
+
+
+
+resource "null_resource" "backup-item" {
+  triggers = {
+    URI = azurerm_cosmosdb_account.cdb.endpoint
+    KEY = azurerm_cosmosdb_account.cdb.primary_key
+    DB = azurerm_cosmosdb_sql_database.cdb-database.name
+    CONTAINER = azurerm_cosmosdb_sql_container.cdb-container.name
+  }
+  #Insert command get_data.py
+  provisioner "local-exec" {
+    when = destroy
+    command = "python ./Scripts/get_data.py '${self.triggers.URI}' '${self.triggers.KEY}' ${self.triggers.DB} ${self.triggers.CONTAINER}"
     interpreter = ["bash", "-c"]
     working_dir = path.module
   }
 }
-*/
+
+
