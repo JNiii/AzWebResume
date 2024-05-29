@@ -18,7 +18,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     item['count'] +=1
     new_item = container.replace_item(item=item, body=item)
     #Returns json response
-    data = {'id':1 , 'count': new_item['count']}
+    data = {'id':new_item['id'] , 'count': new_item['count']}
     return func.HttpResponse(
         json.dumps(data),
         mimetype='application/json',
