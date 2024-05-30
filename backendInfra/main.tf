@@ -409,8 +409,6 @@ resource "null_resource" "az-service-principal" {
   }
 }
 
-
-
 resource "null_resource" "backup-item" {
   triggers = {
     URI = azurerm_cosmosdb_account.cdb.endpoint
@@ -428,3 +426,4 @@ resource "null_resource" "backup-item" {
 }
 
 
+#Add API management services from Azure
