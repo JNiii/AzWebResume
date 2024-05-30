@@ -1,10 +1,28 @@
 # Azure Cloud Resume Challenge
 
-This is my output for the [Cloud Resume Challenge](https://cloudresumechallenge.dev/) 
-hosted on the Azure Cloud Platform. This challenge involves deploying a static 
-website with a visitor counter, utilizing various Azure services for hosting, 
-security, backend, and DNS management. Visit my website here: 
+This is my output for the [Cloud Resume Challenge](https://cloudresumechallenge.dev/), hosted on the Azure Cloud Platform.
+
+## Challenge Overview
+
+The challenge involves:
+- Deploying a static website
+- Implementing a visitor counter
+- Utilizing various Azure services for:
+  - Hosting
+  - Security
+  - Backend
+  - DNS management
+- Implementing Infrastructure as Code (IaC)
+- Implementing CI/CD pipelines
+
+## Visit My Website
+
 [www.imneojay.xyz](https://www.imneojay.xyz/)
+
+## Diagram
+<div style="width:60%; height:auto;">
+  <img src="diagrams/MyAzCloudResume.jpg" alt="Diagram">
+</div>
 
 ## Website Hosting
 - The static website is hosted on 
@@ -67,7 +85,7 @@ security, backend, and DNS management. Visit my website here:
 - Learn more about using 
   [Terraform with Azure](https://learn.hashicorp.com/collections/terraform/azure-get-started).
 
-## DevOps Pipeline
+## CI/CD Pipelines
 - I used [GitHub Actions](https://github.com/features/actions) to automate the delivery 
   of changes to the frontend and backend configurations.
 - By registering a service principal and adding an RBAC contributor role, I have configured 
