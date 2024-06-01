@@ -20,7 +20,7 @@ The challenge involves:
 [www.imneojay.xyz](https://www.imneojay.xyz/)
 
 ## Diagram
-<div style="width:60%; height:auto;">
+<div style="width:70%; height:auto;">
   <img src="diagrams/MyAzCloudResume.jpg" alt="Diagram">
 </div>
 
