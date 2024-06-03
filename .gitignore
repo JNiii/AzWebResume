@@ -41,3 +41,4 @@ Thumbs.db
 /backendInfra/*.tfstate
 /backendInfra/Secrets
 /backendApi/local.settings.json
+.json

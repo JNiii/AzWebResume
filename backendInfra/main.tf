@@ -220,7 +220,6 @@ resource "azurerm_application_insights" "app-insights" {
 }
 ###
 resource "azurerm_linux_function_app" "func-app" {
-
   name                = "fa-azurecloudwebresume"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
@@ -384,22 +383,10 @@ resource "azurerm_monitor_metric_alert" "fa-response-time-alert" {
 #Adds a feature that backups file to a storage account container
 data "azurerm_storage_account" "backup-sa" {  
     resource_group_name = var.data-backups[0]
-
     name = var.data-backups[1]
 }
 
-resource "null_resource" "upload-backup" {
-    triggers = {
-      AZURESACS = data.azurerm_storage_account.backup-sa.primary_blob_connection_string
-      SA_CONTAINER = var.data-backups[2]
-    }
-    provisioner "local-exec" {
-      when = destroy
-      command = "python ./Scripts/upload_data.py '${self.triggers.AZURESACS}' '${self.triggers.SA_CONTAINER}'"
-      working_dir = path.cwd
-      interpreter = ["bash", "-c"]
-  }
-}
+
 #Create RBAC role for Azure resource group
 resource "null_resource" "az-service-principal" {
   provisioner "local-exec" {
@@ -415,15 +402,98 @@ resource "null_resource" "backup-item" {
     KEY = azurerm_cosmosdb_account.cdb.primary_key
     DB = azurerm_cosmosdb_sql_database.cdb-database.name
     CONTAINER = azurerm_cosmosdb_sql_container.cdb-container.name
+    AZURESACS = data.azurerm_storage_account.backup-sa.primary_blob_connection_string
+    SA_CONTAINER = var.data-backups[2]
   }
   #Insert command get_data.py
   provisioner "local-exec" {
     when = destroy
-    command = "python ./Scripts/get_data.py '${self.triggers.URI}' '${self.triggers.KEY}' ${self.triggers.DB} ${self.triggers.CONTAINER}"
+    command = <<EOT
+    python ./Scripts/get_data.py '${self.triggers.URI}' '${self.triggers.KEY}' '${self.triggers.DB}' '${self.triggers.CONTAINER}'
+    python ./Scripts/upload_data.py '${self.triggers.AZURESACS}' '${self.triggers.SA_CONTAINER}'
+    EOT
     interpreter = ["bash", "-c"]
     working_dir = path.module
   }
 }
 
-
 #Add API management services from Azure
+data "azurerm_function_app_host_keys" "func-app-host-key" {
+  name                = azurerm_linux_function_app.func-app.name
+  resource_group_name = "rg-web-resume"
+}
+
+
+resource "azurerm_api_management" "apim" {
+  name                = "azcloudresume-apim"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  publisher_name      = "imneojay"
+  publisher_email     = "ineojay@gmail.com"
+
+  sku_name = "Consumption_0"
+}
+
+resource "azurerm_api_management_api" "apim-api" {
+  depends_on = [ azurerm_linux_function_app.func-app ]
+  name                = azurerm_linux_function_app.func-app.name
+  resource_group_name = azurerm_resource_group.rg.name
+  api_management_name = azurerm_api_management.apim.name
+  revision            = "1"
+  display_name        = azurerm_linux_function_app.func-app.name
+  protocols           = ["https"]
+  subscription_required = false
+  import {
+    content_format = "openapi"
+    content_value  = file("${path.module}/Secrets/fa-azurecloudwebresume.openapi.yaml")
+  }
+}
+
+
+resource "azurerm_api_management_backend" "apim-backend" {
+  name                = azurerm_linux_function_app.func-app.name
+  resource_group_name = azurerm_resource_group.rg.name
+  api_management_name = azurerm_api_management.apim.name
+  protocol            = "http"
+  url                 = "https://${azurerm_linux_function_app.func-app.name}.azurewebsites.net/api/"
+
+  credentials {
+    header = {
+      "x-functions-key" = "${data.azurerm_function_app_host_keys.func-app-host-key.default_function_key}"
+    }
+  }
+}
+
+resource "azurerm_api_management_api_policy" "apim-api-policy" {
+  api_name            = azurerm_api_management_api.apim-api.name
+  api_management_name = azurerm_api_management_api.apim-api.api_management_name
+  resource_group_name = azurerm_api_management_api.apim-api.resource_group_name
+  xml_content = <<XML
+    <policies>
+      <inbound>
+          <base />
+          <set-backend-service id="apim-generated-policy" backend-id="fa-azurecloudwebresume" />
+          <cors allow-credentials="true">
+              <allowed-origins>
+                  <origin>https://www.imneojay.xyz</origin>
+              </allowed-origins>
+              <allowed-methods>
+                  <method>GET</method>
+                  <method>POST</method>
+              </allowed-methods>
+          </cors>
+          <rate-limit calls="5" renewal-period="60" />
+      </inbound>
+      <backend>
+          <base />
+      </backend>
+      <outbound>
+          <base />
+      </outbound>
+      <on-error>
+          <base />
+      </on-error>
+    </policies>
+  XML
+}
+
