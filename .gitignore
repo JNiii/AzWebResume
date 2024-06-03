@@ -41,4 +41,5 @@ Thumbs.db
 /IaC/*.tfstate
 /IaC/Secrets
 /backendApi/local.settings.json
-.json
+*.json
+*.hcl
