@@ -2,6 +2,7 @@ window.addEventListener('DOMContentLoaded', (event) =>{
     getVisitCount();
 })
 
+
 const localfunctionApi = 'http://localhost:7071/api/GetAzureResume';
 const azurefunctionApi = 'https://azcloudresume-apim.azure-api.net/GetAzureResume';
 const getVisitCount = () => {

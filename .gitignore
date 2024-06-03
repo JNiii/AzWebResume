@@ -37,8 +37,8 @@ ehthumbs.db
 Thumbs.db
 
 #
-/backendInfra/.terraform
-/backendInfra/*.tfstate
-/backendInfra/Secrets
+/IaC/.terraform
+/IaC/*.tfstate
+/IaC/Secrets
 /backendApi/local.settings.json
 .json

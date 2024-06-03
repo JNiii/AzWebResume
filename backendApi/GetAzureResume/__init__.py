@@ -11,6 +11,7 @@ client = CosmosClient(URI, credential=KEY)
 database = client.get_database_client("AzureResume")
 container = database.get_container_client("Counter")
 
+
 def main(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
     #Query CosmosDB
